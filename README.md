@@ -22,11 +22,17 @@ This Node.js application performs a basic SEO audit and displays social media pr
 - **Responsive UI:**  
   Powered by Bootstrap 5 for a modern and clean design.
 
+## Live Preview
+
+Check out a live demo of the project here: [Live Demo](https://boiling-escarpment-36147-49817ed139e2.herokuapp.com/?url=https%3A%2F%2Fwww.wikipedia.com)
+
+Alternatively, if you prefer to run the project locally, follow the installation and usage instructions below.
+
 ## Installation
 
 1. **Clone the Repository:**
 ```
-   git clone https://github.com/yourusername/seo-audit-preview.git
+   git clone https://github.com/alianjum0/ogpreview-node.git
 ```
 
 2. **Navigate to the Project Directory:**

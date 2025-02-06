@@ -6,6 +6,9 @@
   "scripts": {
     "start": "node server.js"
   },
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "keywords": [
     "seo",
     "audit",
