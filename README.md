@@ -1,4 +1,4 @@
-# SEO Audit & Social Media Preview
+# MetaScope — SEO Audit & Social Preview
 
 A compact Node.js application that audits a public webpage's SEO metadata and renders Open Graph and Twitter Card previews. It demonstrates server-side HTML parsing, defensive outbound HTTP requests, secure rendering, and automated HTTP testing.
 
@@ -6,7 +6,7 @@ A compact Node.js application that audits a public webpage's SEO metadata and re
 
 - Checks title, description, canonical URL, H1, language, robots, and viewport metadata.
 - Reports completeness of Open Graph and Twitter Card tags.
-- Renders website, Facebook, Twitter, and TikTok-style preview cards.
+- Renders search, Facebook, X/Twitter, and LinkedIn-style preview cards.
 - Lists discovered Open Graph and Twitter metadata for inspection.
 - Resolves relative preview URLs against the audited page.
 - Returns clear errors for invalid, unreachable, oversized, slow, or non-HTML targets.
@@ -31,7 +31,7 @@ These controls are appropriate for a demonstration project, but a public high-tr
 - Express 5
 - Axios
 - Cheerio
-- Bootstrap 5
+- Responsive, dependency-free CSS
 - Node's built-in test runner and Supertest
 
 ## Requirements

@@ -33,6 +33,61 @@ test("renders a successful SEO and social metadata audit", async () => {
   assert.match(response.text, /SEO Audit/);
 });
 
+test("explains the product and next step on the landing page", async () => {
+  const app = createApp();
+  const response = await request(app).get("/").expect(200);
+
+  assert.match(response.text, /Preview how your page appears before you share it/);
+  assert.match(response.text, /Enter a public page URL/);
+  assert.match(response.text, /Run free audit/);
+  assert.match(response.text, /No signup\. No API key\./);
+  assert.match(response.text, /Metadata debugger/);
+  assert.match(response.text, /request-method">GET/);
+  assert.doesNotMatch(response.text, /Portfolio project/);
+});
+
+test("summarizes audit health and exposes semantic result statuses", async () => {
+  const app = createApp({ pageFetcher: async () => fixtureHtml });
+  const response = await request(app)
+    .get("/")
+    .query({ url: "https://example.com/source" })
+    .expect(200);
+
+  assert.match(response.text, /Audit results/);
+  assert.match(response.text, /checks ready/);
+  assert.match(response.text, /class="status status--pass"/);
+  assert.match(response.text, /class="status status--attention"/);
+  assert.match(response.text, /Search result preview/);
+});
+
+test("does not count fallback URLs as complete Open Graph metadata", async () => {
+  const partialOpenGraphHtml = `
+    <title>Partial metadata fixture</title>
+    <meta property="og:title" content="Partial Open Graph title">
+    <meta property="og:description" content="Partial Open Graph description">`;
+  const app = createApp({ pageFetcher: async () => partialOpenGraphHtml });
+  const response = await request(app)
+    .get("/")
+    .query({ url: "https://example.com/source" })
+    .expect(200);
+
+  const openGraphAuditItem = response.text.match(
+    /<article class="audit-item">(?:(?!<\/article>)[\s\S])*Open Graph Tags(?:(?!<\/article>)[\s\S])*<\/article>/,
+  );
+  assert.ok(openGraphAuditItem);
+  assert.match(openGraphAuditItem[0], /status--attention/);
+  assert.match(openGraphAuditItem[0], /Incomplete/);
+  assert.match(response.text, /src="\/preview-placeholder\.svg"/);
+});
+
+test("serves the local responsive stylesheet", async () => {
+  const app = createApp();
+  const response = await request(app).get("/styles.css").expect(200);
+
+  assert.match(response.headers["content-type"], /text\/css/);
+  assert.match(response.text, /@media \(max-width: 720px\)/);
+});
+
 test("escapes untrusted metadata and rejects unsafe preview URLs", async () => {
   const maliciousHtml = `
     <title>Safe fallback</title>
@@ -115,5 +170,9 @@ test("escapes attribute delimiters and allows only web URLs", () => {
   assert.equal(
     safeWebUrl("javascript:alert(1)", "https://example.com", "fallback"),
     "fallback",
+  );
+  assert.equal(
+    safeWebUrl("", "https://example.com", "/preview-placeholder.svg"),
+    "/preview-placeholder.svg",
   );
 });
