@@ -1,10 +1,11 @@
 const cheerio = require("cheerio");
 const express = require("express");
+const path = require("node:path");
 const rateLimit = require("express-rate-limit");
 const helmet = require("helmet");
 const { fetchPage } = require("./lib/safe-fetch");
 
-const PLACEHOLDER_IMAGE = "https://placehold.co/600x315?text=No+Image";
+const PLACEHOLDER_IMAGE = "/preview-placeholder.svg";
 
 function escapeHtml(value) {
   if (value === undefined || value === null) return "";
@@ -17,6 +18,7 @@ function escapeHtml(value) {
 }
 
 function safeWebUrl(value, baseUrl, fallback = "") {
+  if (!value) return fallback;
   try {
     const parsed = new URL(value, baseUrl);
     return ["http:", "https:"].includes(parsed.protocol)
@@ -143,14 +145,31 @@ function renderAnalysis(html, targetUrl) {
 
   const seoAuditRows = seoChecks
     .map(
-      (check) => `
-        <tr>
-          <td>${escapeHtml(check.name)}</td>
-          <td>${escapeHtml(check.status)}</td>
-          <td>${escapeHtml(check.suggestion)}</td>
-        </tr>`,
+      (check) => {
+        const isReady = check.suggestion === "Looks good!";
+        const displayStatus =
+          !isReady && check.status.startsWith("Found")
+            ? "Review"
+            : check.status;
+        return `
+          <article class="audit-item">
+            <div class="audit-item__topline">
+              <h3>${escapeHtml(check.name)}</h3>
+              <span class="status status--${isReady ? "pass" : "attention"}">
+                <span aria-hidden="true">${isReady ? "✓" : "!"}</span>
+                ${escapeHtml(displayStatus)}
+              </span>
+            </div>
+            <p>${escapeHtml(check.suggestion)}</p>
+          </article>`;
+      },
     )
     .join("");
+
+  const readyCount = seoChecks.filter(
+    (check) => check.suggestion === "Looks good!",
+  ).length;
+  const opportunityCount = seoChecks.length - readyCount;
 
   const metaTags = {};
   $("meta").each((_index, element) => {
@@ -170,7 +189,7 @@ function renderAnalysis(html, targetUrl) {
     .map(
       ([key, value]) => `
         <tr>
-          <td>${escapeHtml(key)}</td>
+          <th scope="row"><code>${escapeHtml(key)}</code></th>
           <td>${escapeHtml(value)}</td>
         </tr>`,
     )
@@ -187,87 +206,155 @@ function renderAnalysis(html, targetUrl) {
   const safeOgUrl = escapeHtml(ogUrl);
 
   return `
-    <h2 class="mb-3">SEO Audit</h2>
-    <div class="table-responsive mb-5">
-      <table class="table table-bordered">
-        <thead class="table-light">
-          <tr><th>SEO Element</th><th>Status</th><th>Suggestion</th></tr>
-        </thead>
-        <tbody>${seoAuditRows}</tbody>
-      </table>
-    </div>
-
-    <h2 class="mb-3">Website Preview</h2>
-    <div class="card mb-4">
-      <img src="${safeOgImage}" class="card-img-top" alt="OG Image">
-      <div class="card-body">
-        <h5 class="card-title">${previewTitle}</h5>
-        <p class="card-text">${previewDescription}</p>
-        <a href="${safeOgUrl}" class="btn btn-primary" target="_blank" rel="noopener noreferrer">${safeOgUrl}</a>
-      </div>
-    </div>
-
-    <h2 class="mb-3">Social Media Previews</h2>
-    <div class="row mb-4 g-3">
-      <div class="col-md-4">
-        <div class="card h-100">
-          <img src="${safeOgImage}" class="card-img-top" alt="Facebook Preview">
-          <div class="card-body">
-            <h5 class="card-title">${facebookTitle}</h5>
-            <p class="card-text">${facebookDescription}</p>
-            <span class="badge bg-primary">Facebook</span>
-          </div>
+    <section class="results" aria-labelledby="results-title">
+      <div class="results-summary surface">
+        <div>
+          <p class="eyebrow">Audit results</p>
+          <h2 id="results-title">${readyCount} of ${seoChecks.length} checks ready</h2>
+          <p>${
+            opportunityCount
+              ? `${opportunityCount} ${opportunityCount === 1 ? "opportunity" : "opportunities"} to improve before publishing.`
+              : "Everything in this quick audit looks ready to share."
+          }</p>
+          <a class="source-link" href="${safeOgUrl}" target="_blank" rel="noopener noreferrer">
+            <span aria-hidden="true">↗</span> ${safeOgUrl}
+          </a>
+        </div>
+        <div class="score" aria-label="${readyCount} of ${seoChecks.length} checks ready">
+          <strong>${readyCount}</strong>
+          <span>/ ${seoChecks.length}</span>
         </div>
       </div>
-      <div class="col-md-4">
-        <div class="card h-100">
-          <img src="${safeTwitterImage}" class="card-img-top" alt="Twitter Preview">
-          <div class="card-body">
-            <h5 class="card-title">${escapeHtml(twitterTitle || ogTitle || "No Title")}</h5>
-            <p class="card-text">${escapeHtml(twitterDescription || ogDescription || "No Description")}</p>
-            <span class="badge bg-info text-dark">Twitter</span>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <div class="card h-100">
-          <img src="${safeOgImage}" class="card-img-top" alt="TikTok Preview">
-          <div class="card-body">
-            <h5 class="card-title">${facebookTitle}</h5>
-            <p class="card-text">${facebookDescription}</p>
-            <span class="badge bg-dark">TikTok</span>
-          </div>
-        </div>
-      </div>
-    </div>
 
-    <h2 class="mb-3">All OG/Twitter Meta Tags</h2>
-    <div class="table-responsive mb-5">
-      <table class="table table-striped">
-        <thead class="table-light"><tr><th>Tag</th><th>Content</th></tr></thead>
-        <tbody>${metaRows}</tbody>
-      </table>
-    </div>`;
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">SEO essentials</p>
+          <h2>What is working and what to fix</h2>
+        </div>
+        <p>Focused checks for the metadata that shapes search visibility and link previews.</p>
+      </div>
+      <div class="audit-grid">${seoAuditRows}</div>
+
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Live preview</p>
+          <h2>See what your visitors will see</h2>
+        </div>
+        <p>Previews are approximations. Each platform can crop images and text differently.</p>
+      </div>
+
+      <div class="preview-layout">
+        <article class="search-preview surface">
+          <div class="preview-label">
+            <span class="preview-icon preview-icon--search" aria-hidden="true">G</span>
+            <div><strong>Search result preview</strong><span>Desktop result</span></div>
+          </div>
+          <div class="search-result">
+            <p class="search-result__url">${safeOgUrl}</p>
+            <h3>${previewTitle}</h3>
+            <p>${previewDescription}</p>
+          </div>
+        </article>
+
+        <article class="social-preview social-preview--facebook surface">
+          <div class="preview-label">
+            <span class="preview-icon preview-icon--facebook" aria-hidden="true">f</span>
+            <div><strong>Facebook</strong><span>Open Graph preview</span></div>
+          </div>
+          <div class="social-card">
+            <img src="${safeOgImage}" alt="Facebook link preview image">
+            <div class="social-card__body">
+              <span>${safeOgUrl}</span>
+              <h3>${facebookTitle}</h3>
+              <p>${facebookDescription}</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="social-preview social-preview--x surface">
+          <div class="preview-label">
+            <span class="preview-icon preview-icon--x" aria-hidden="true">𝕏</span>
+            <div><strong>X / Twitter</strong><span>Summary card</span></div>
+          </div>
+          <div class="social-card social-card--dark">
+            <img src="${safeTwitterImage}" alt="X link preview image">
+            <div class="social-card__body">
+              <span>${safeOgUrl}</span>
+              <h3>${escapeHtml(twitterTitle || ogTitle || "No Title")}</h3>
+              <p>${escapeHtml(twitterDescription || ogDescription || "No Description")}</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="social-preview social-preview--linkedin surface">
+          <div class="preview-label">
+            <span class="preview-icon preview-icon--linkedin" aria-hidden="true">in</span>
+            <div><strong>LinkedIn</strong><span>Open Graph preview</span></div>
+          </div>
+          <div class="social-card">
+            <img src="${safeOgImage}" alt="LinkedIn link preview image">
+            <div class="social-card__body">
+              <h3>${facebookTitle}</h3>
+              <span>${safeOgUrl}</span>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <details class="metadata surface">
+        <summary>
+          <span><strong>Raw social metadata</strong><small>${Object.keys(metaTags).length} tags discovered</small></span>
+          <span class="details-action">View tags <span aria-hidden="true">⌄</span></span>
+        </summary>
+        <div class="metadata__table-wrap">
+          <table>
+            <thead><tr><th scope="col">Tag</th><th scope="col">Content</th></tr></thead>
+            <tbody>${metaRows || '<tr><td colspan="2">No Open Graph or Twitter tags were found.</td></tr>'}</tbody>
+          </table>
+        </div>
+      </details>
+    </section>`;
 }
 
-function renderPage(content) {
+function renderPage(form, content) {
   return `<!DOCTYPE html>
-    <html lang="en">
+    <html lang="en" data-theme="light">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1">
-      <meta name="description" content="Audit SEO and social sharing metadata for any public webpage.">
-      <title>SEO Audit & Social Preview</title>
-      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+      <meta name="description" content="Audit SEO metadata and preview how any public webpage appears when shared.">
+      <meta name="theme-color" content="#f7f7fb">
+      <title>MetaScope — SEO Audit & Social Preview</title>
+      <link href="/styles.css" rel="stylesheet">
     </head>
-    <body class="bg-light">
-      <main class="container py-5">
-        <div class="col-lg-10 col-xl-9 mx-auto mb-4">
-          <h1>SEO Audit & Social Media Preview</h1>
-          <p class="text-secondary">Inspect the SEO, Open Graph, and Twitter Card metadata of a public webpage.</p>
-          ${content}
-        </div>
+    <body>
+      <header class="site-header shell">
+        <a class="brand" href="/" aria-label="MetaScope home">
+          <span class="brand__mark" aria-hidden="true"><span></span></span>
+          <span>MetaScope</span>
+        </a>
+        <span class="project-badge"><span aria-hidden="true">◆</span> Portfolio project</span>
+      </header>
+      <main>
+        <section class="hero shell">
+          <div class="hero__copy">
+            <p class="eyebrow"><span aria-hidden="true"></span> SEO + social metadata inspector</p>
+            <h1 aria-label="Preview how your page appears before you share it.">Preview how your page appears <em>before you share it.</em></h1>
+            <p class="hero__lede">Audit essential SEO tags and see realistic search and social previews in one focused report.</p>
+            <ul class="trust-list" aria-label="Project benefits">
+              <li><span aria-hidden="true">✓</span> No signup. No API key.</li>
+              <li><span aria-hidden="true">✓</span> Secure public-URL analysis</li>
+              <li><span aria-hidden="true">✓</span> Results in seconds</li>
+            </ul>
+          </div>
+          ${form}
+        </section>
+        <div class="shell">${content}</div>
       </main>
+      <footer class="site-footer shell">
+        <div><span class="brand__mark brand__mark--small" aria-hidden="true"><span></span></span><strong>MetaScope</strong></div>
+        <p>Built with Node.js, Express, Cheerio, and careful URL handling.</p>
+      </footer>
     </body>
     </html>`;
 }
@@ -287,11 +374,12 @@ function createApp({
           defaultSrc: ["'self'"],
           imgSrc: ["'self'", "data:", "http:", "https:"],
           scriptSrc: ["'none'"],
-          styleSrc: ["'self'", "https://cdn.jsdelivr.net"],
+          styleSrc: ["'self'"],
         },
       },
     }),
   );
+  app.use(express.static(path.join(__dirname, "public")));
 
   const analysisLimiter = rateLimit({
     legacyHeaders: false,
@@ -308,34 +396,70 @@ function createApp({
       req.query.url ? analysisLimiter(req, res, next) : next(),
     async (req, res) => {
       const requestedUrl = typeof req.query.url === "string" ? req.query.url : "";
-      let content = `
-        <form method="GET" action="/" class="mb-5">
-          <label for="url" class="form-label">Webpage URL</label>
-          <div class="input-group">
-            <input id="url" type="url" name="url" class="form-control" placeholder="https://example.com" value="${escapeHtml(requestedUrl)}" required>
-            <button class="btn btn-primary" type="submit">Analyze</button>
+      const form = `
+        <form method="GET" action="/" class="analyzer-panel surface">
+          <div class="analyzer-panel__header">
+            <span class="analyzer-panel__icon" aria-hidden="true">⌁</span>
+            <div>
+              <h2>Analyze a webpage</h2>
+              <p>Enter a public page URL to get started.</p>
+            </div>
           </div>
+          <label for="url">Enter a public page URL</label>
+          <div class="url-field">
+            <span class="url-field__icon" aria-hidden="true">⌕</span>
+            <input id="url" type="url" name="url" placeholder="https://example.com" value="${escapeHtml(requestedUrl)}" autocomplete="url" inputmode="url" required>
+          </div>
+          <button class="primary-button" type="submit">
+            Run free audit <span aria-hidden="true">→</span>
+          </button>
+          <p class="form-note"><span aria-hidden="true">◈</span> Only publicly accessible HTML pages can be analyzed.</p>
         </form>`;
+
+      let content = `
+        <section class="feature-grid" aria-label="What MetaScope checks">
+          <article>
+            <span class="feature-icon feature-icon--violet" aria-hidden="true">⌕</span>
+            <h2>Audit SEO essentials</h2>
+            <p>Check titles, descriptions, headings, canonical URLs, language, and crawl settings.</p>
+          </article>
+          <article>
+            <span class="feature-icon feature-icon--blue" aria-hidden="true">▣</span>
+            <h2>Preview every share</h2>
+            <p>See how your page can appear across search, Facebook, X, and LinkedIn.</p>
+          </article>
+          <article>
+            <span class="feature-icon feature-icon--green" aria-hidden="true">✓</span>
+            <h2>Spot fixes quickly</h2>
+            <p>Scan clear pass states and practical opportunities without digging through source.</p>
+          </article>
+        </section>`;
 
       if (requestedUrl) {
         try {
           const html = await pageFetcher(requestedUrl);
-          content += renderAnalysis(html, requestedUrl);
+          content = renderAnalysis(html, requestedUrl);
         } catch (error) {
           const isPublicError = Number.isInteger(error.statusCode);
           res.status(isPublicError ? error.statusCode : 502);
-          content += `
-            <div class="alert alert-danger" role="alert">
-              ${escapeHtml(
+          content = `
+            <section class="error-card surface" role="alert">
+              <span class="error-card__icon" aria-hidden="true">!</span>
+              <div>
+                <p class="eyebrow">Analysis could not be completed</p>
+                <h2>We could not inspect that page</h2>
+                <p>${escapeHtml(
                 isPublicError
                   ? error.message
                   : "The target website could not be analyzed.",
-              )}
-            </div>`;
+                )}</p>
+                <p class="error-card__hint">Check that the URL is public, returns HTML, and is available without signing in.</p>
+              </div>
+            </section>`;
         }
       }
 
-      res.type("html").send(renderPage(content));
+      res.type("html").send(renderPage(form, content));
     },
   );
 
