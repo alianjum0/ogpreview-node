@@ -468,6 +468,19 @@ summary:focus-visible {
   white-space: nowrap;
 }
 
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.result-actions [data-share-status] {
+  color: var(--green);
+  font-size: 0.72rem;
+}
+
 .score {
   display: flex;
   flex: 0 0 112px;
@@ -680,6 +693,16 @@ summary:focus-visible {
   font-size: 0.67rem;
 }
 
+.preview-icon--slack {
+  color: white;
+  background: #611f69;
+}
+
+.preview-icon--whatsapp {
+  color: white;
+  background: #1fa855;
+}
+
 .search-result {
   max-width: 720px;
   padding: 21px 24px;
@@ -778,6 +801,66 @@ summary:focus-visible {
 .social-card--dark .social-card__body span,
 .social-card--dark .social-card__body p {
   color: #a9a9a9;
+}
+
+.message-preview {
+  overflow: hidden;
+  border: 1px solid #d9dce3;
+  border-radius: 10px;
+}
+
+.message-preview__body {
+  min-width: 0;
+  padding: 13px 14px;
+}
+
+.message-preview__body > span {
+  display: block;
+  overflow: hidden;
+  color: #6d7078;
+  font-size: 0.62rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-preview__body h3 {
+  margin: 5px 0 4px;
+  font-size: 0.84rem;
+  line-height: 1.3;
+}
+
+.message-preview__body p {
+  margin: 0 0 8px;
+  color: #676971;
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
+.message-preview__body img,
+.message-preview--whatsapp > img {
+  width: 100%;
+  aspect-ratio: 1.91 / 1;
+  object-fit: cover;
+  background: #e7e6ed;
+  border-radius: 6px;
+}
+
+.message-preview--slack {
+  display: grid;
+  grid-template-columns: 4px minmax(0, 1fr);
+  background: white;
+}
+
+.message-preview__accent {
+  background: #b9b9bd;
+}
+
+.message-preview--whatsapp {
+  background: #f0f2f5;
+}
+
+.message-preview--whatsapp > img {
+  border-radius: 0;
 }
 
 .metadata {
@@ -1233,12 +1316,16 @@ summary:focus-visible {
 }
 
 .secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--ink-soft);
   background: white;
   border: 1px solid var(--line);
   border-radius: 7px;
   cursor: pointer;
   font-weight: 700;
+  text-decoration: none;
 }
 
 [data-copy-status] {

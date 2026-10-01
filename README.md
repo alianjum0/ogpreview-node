@@ -6,9 +6,11 @@ A compact Node.js application that audits a public webpage or pasted HTML, expla
 
 - Accepts a public URL or pasted HTML for localhost, staging, and bot-blocked pages.
 - Scores transparent SEO, indexability, Open Graph, and Twitter/X rules from 0–100.
-- Renders search, Facebook, X/Twitter, and LinkedIn-style preview cards.
+- Renders search, Facebook, X/Twitter, LinkedIn, Slack, and WhatsApp-style preview cards.
 - Validates social-image reachability, type, bytes, dimensions, and aspect ratio.
 - Edits draft metadata with instant preview updates and generated `<head>` tags.
+- Exposes the same URL analyzer through a versioned JSON response.
+- Copies shareable audit links and exports JSON or Markdown reports without storage.
 - Lists discovered Open Graph and Twitter metadata for inspection.
 - Resolves relative preview URLs against the audited page.
 - Returns clear errors for invalid, unreachable, oversized, slow, or non-HTML targets.
@@ -65,6 +67,24 @@ PORT=4000 pnpm start
 
 No database, API key, or environment file is required.
 
+## API and report exports
+
+Analyze a public page as JSON:
+
+```http
+GET /api/analyze?url=https%3A%2F%2Fexample.com
+```
+
+The response contains `schemaVersion`, the analyzed URL and source details, the score summary, normalized metadata, deterministic checks, and image-inspection results. API failures return a JSON `error` without exposing unexpected upstream details.
+
+Download the same URL audit as Markdown:
+
+```http
+GET /report.md?url=https%3A%2F%2Fexample.com
+```
+
+URL results also include controls to copy the reproducible audit URL, open the JSON export, or download the Markdown report. Pasted HTML stays local to the request and therefore does not expose share/export controls.
+
 If the application runs behind a reverse proxy, set the number of trusted proxy hops so rate limiting uses the client address safely:
 
 ```bash
@@ -91,7 +111,9 @@ The test suite covers:
 - HTML and attribute escaping
 - Unsafe preview URL removal
 - Successful SEO and social metadata rendering
+- Slack and WhatsApp preview rendering
 - URL and pasted-HTML analysis modes
+- Stable JSON analysis and Markdown report exports
 - Deterministic audit rules and scoring
 - Bounded social-image inspection and safe same-origin previews
 - Generated metadata-tag escaping and unsafe URL omission
@@ -107,6 +129,7 @@ The test suite covers:
 │   ├── audit.js              # Deterministic rules and scoring
 │   ├── image-inspector.js    # Bounded social-image validation
 │   ├── metadata.js           # Normalized metadata parsing
+│   ├── report.js             # Public JSON and Markdown serializers
 │   └── safe-fetch.js         # URL validation and bounded page fetching
 ├── public/
 │   ├── app.js                # Input tabs and live draft previews
@@ -131,6 +154,7 @@ The previous Heroku demo is no longer linked because it currently returns 404.
 - JavaScript-rendered metadata is not executed because the application analyzes the fetched HTML response.
 - Public websites may block automated requests or return different metadata based on geography or user agent.
 - Draft edits update previews and generated tags but do not recalculate the source-page audit.
+- Share links and exports rerun the live URL analysis; results can change when the target page changes.
 
 ## License
 
