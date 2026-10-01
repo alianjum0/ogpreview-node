@@ -71,6 +71,12 @@ TRUST_PROXY_HOPS=1 pnpm start
 pnpm test
 ```
 
+Before publishing a pull request, run the same syntax, test, and production dependency checks used by CI:
+
+```bash
+pnpm verify
+```
+
 The test suite covers:
 
 - Private-network and DNS-based SSRF rejection
