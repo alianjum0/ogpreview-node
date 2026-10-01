@@ -64,3 +64,18 @@ test("rejects unsafe metadata URLs without discarding the raw evidence", () => {
   assert.equal(metadata.openGraph.image.url, "");
   assert.equal(safeWebUrl("/ok", "https://example.com/page"), "https://example.com/ok");
 });
+
+test("summarizes valid and invalid JSON-LD without exposing full payloads", () => {
+  const metadata = parseMetadata(`<!doctype html><head>
+    <script type="application/ld+json">
+      {"@context":"https://schema.org","@graph":[{"@type":"Article"},{"@type":["Person","Author"]}]}
+    </script>
+    <script type="application/ld+json">{"@type":</script>
+  </head>`, "https://example.com/page");
+
+  assert.deepEqual(metadata.structuredData, [
+    { valid: true, types: ["Article", "Person", "Author"] },
+    { valid: false, types: [], error: "Invalid JSON-LD." },
+  ]);
+  assert.doesNotMatch(JSON.stringify(metadata.structuredData), /@context/);
+});

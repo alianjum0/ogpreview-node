@@ -6,7 +6,8 @@ const { analyzeDocument, analyzeHtml } = require("./lib/analyze");
 const { fetchImage, inspectImage } = require("./lib/image-inspector");
 const { safeWebUrl } = require("./lib/metadata");
 const { serializeAnalysis, toMarkdownReport } = require("./lib/report");
-const { fetchPage, normalizeTargetUrl } = require("./lib/safe-fetch");
+const { fetchPage, fetchSitemap, normalizeTargetUrl } = require("./lib/safe-fetch");
+const { auditSite } = require("./lib/site-audit");
 const { generateTags } = require("./public/tag-generator");
 
 const PLACEHOLDER_IMAGE = "/preview-placeholder.svg";
@@ -142,6 +143,7 @@ function renderAnalysis(htmlOrAnalysis, targetUrl) {
     "twitter-title": "Twitter title",
     "twitter-description": "Twitter description",
     "twitter-image": "Twitter image",
+    "structured-data": "Structured data",
   };
 
   const seoAuditRows = checks
@@ -329,7 +331,75 @@ function renderAnalysis(htmlOrAnalysis, targetUrl) {
           </table>
         </div>
       </details>
-    </section>`;
+  </section>`;
+}
+
+function renderDuplicateGroup(label, groups) {
+  return `<article class="duplicate-group">
+    <h3>${escapeHtml(label)}</h3>
+    ${groups.length
+      ? groups.map((group) => `<div class="duplicate-group__item">
+          <strong>${escapeHtml(group.value)}</strong>
+          <span>${group.urls.map(escapeHtml).join(" · ")}</span>
+        </div>`).join("")
+      : "<p>No duplicates found.</p>"}
+  </article>`;
+}
+
+function renderSiteAudit(site) {
+  const rows = site.pages.map((page) => {
+    if (page.status === "error") {
+      return `<tr>
+        <td><a href="${escapeHtml(page.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(page.url)}</a></td>
+        <td><span class="status status--error">error</span></td>
+        <td colspan="4">${escapeHtml(page.error)}</td>
+      </tr>`;
+    }
+    return `<tr>
+      <td><a href="${escapeHtml(page.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(page.url)}</a></td>
+      <td><strong>${page.score.value}</strong>/100</td>
+      <td>${page.score.errors}</td>
+      <td>${page.score.warnings}</td>
+      <td>${escapeHtml(page.metadata.title || "No title")}</td>
+      <td>${escapeHtml(page.structuredData.types.join(", ") || "None")}</td>
+    </tr>`;
+  }).join("");
+  const average = site.summary.averageScore === null ? "—" : site.summary.averageScore;
+
+  return `<section class="site-results" aria-labelledby="site-results-title">
+    <div class="results-summary surface">
+      <div>
+        <p class="eyebrow">Site audit</p>
+        <h2 id="site-results-title">${site.summary.total} pages analyzed</h2>
+        <p>${site.summary.succeeded} completed · ${site.summary.failed} failed · ${site.discovery.truncated} truncated</p>
+        <a class="source-link" href="${escapeHtml(site.source.sitemapUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(site.source.sitemapUrl)}</a>
+      </div>
+      <div class="score" aria-label="Average metadata score ${average} out of 100">
+        <strong>${average}</strong><span>/ 100</span>
+      </div>
+    </div>
+
+    <div class="section-heading">
+      <div><p class="eyebrow">Page inventory</p><h2>Metadata health across the sitemap</h2></div>
+      <p>Bounded to ${site.limits.maxPages} same-origin pages with ${site.limits.concurrency} concurrent requests.</p>
+    </div>
+    <div class="site-table surface">
+      <table>
+        <thead><tr><th>Page</th><th>Score</th><th>Errors</th><th>Warnings</th><th>Title</th><th>Schema types</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+
+    <div class="section-heading">
+      <div><p class="eyebrow">Cross-page checks</p><h2>Duplicate metadata</h2></div>
+      <p>Repeated non-empty values found across successfully analyzed pages.</p>
+    </div>
+    <div class="duplicate-grid surface">
+      ${renderDuplicateGroup("Duplicate titles", site.duplicates.titles)}
+      ${renderDuplicateGroup("Duplicate descriptions", site.duplicates.descriptions)}
+      ${renderDuplicateGroup("Duplicate canonicals", site.duplicates.canonicals)}
+    </div>
+  </section>`;
 }
 
 function renderAnalyzerForm({
@@ -337,6 +407,7 @@ function renderAnalyzerForm({
   baseUrl = "",
   pastedHtml = "",
   requestedUrl = "",
+  sitemapUrl = "",
 } = {}) {
   return `
     <div class="analyzer-panel surface" data-active-input="${escapeHtml(activeMode)}">
@@ -344,12 +415,13 @@ function renderAnalyzerForm({
         <span class="analyzer-panel__icon" aria-hidden="true">{ }</span>
         <div>
           <h2>Analyze metadata</h2>
-          <p>Inspect a public URL or paste HTML directly.</p>
+          <p>Inspect a page, paste HTML, or audit a bounded sitemap.</p>
         </div>
       </div>
       <div class="input-tabs" role="tablist" aria-label="Analysis input">
         <button type="button" role="tab" data-input-mode="url" aria-selected="${activeMode === "url"}">URL</button>
         <button type="button" role="tab" data-input-mode="html" aria-selected="${activeMode === "html"}">HTML</button>
+        <button type="button" role="tab" data-input-mode="sitemap" aria-selected="${activeMode === "sitemap"}">Sitemap</button>
       </div>
       <form method="GET" action="/" class="analyzer-form" data-input-panel="url"${activeMode === "url" ? "" : " hidden"}>
         <label for="url">Enter a public page URL</label>
@@ -370,6 +442,15 @@ function renderAnalyzerForm({
         <textarea id="html" name="html" rows="8" maxlength="262144" required>${escapeHtml(pastedHtml)}</textarea>
         <button class="primary-button" type="submit">Analyze pasted HTML <span aria-hidden="true">→</span></button>
         <p class="form-note"><span aria-hidden="true">$</span> processed in memory · 256 KB max · no page fetch</p>
+      </form>
+      <form method="GET" action="/site" class="analyzer-form" data-input-panel="sitemap"${activeMode === "sitemap" ? "" : " hidden"}>
+        <label for="sitemap-url">Enter a public sitemap URL</label>
+        <div class="url-field">
+          <span class="request-method">XML</span>
+          <input id="sitemap-url" type="url" name="url" placeholder="https://example.com/sitemap.xml" value="${escapeHtml(sitemapUrl)}" autocomplete="url" inputmode="url" required>
+        </div>
+        <button class="primary-button" type="submit">Audit sitemap <span aria-hidden="true">→</span></button>
+        <p class="form-note"><span aria-hidden="true">$</span> 10 same-origin pages max · 3 concurrent requests</p>
       </form>
     </div>`;
 }
@@ -437,6 +518,7 @@ function createApp({
   pageFetcher = fetchPage,
   imageFetcher = fetchImage,
   imageInspector = inspectImage,
+  sitemapFetcher = fetchSitemap,
   rateLimitOptions = {},
   trustProxy = false,
 } = {}) {
@@ -487,6 +569,8 @@ function createApp({
     const html = await pageFetcher(requestedUrl);
     return analyzeDocument(html, requestedUrl, { imageInspector, mode: "url" });
   };
+
+  const analyzeSitemap = (value) => auditSite(value, { pageFetcher, sitemapFetcher });
 
   app.get(
     "/",
@@ -543,6 +627,18 @@ function createApp({
     }
   });
 
+  app.get("/api/site", analysisLimiter, async (req, res) => {
+    try {
+      const requestedUrl = typeof req.query.url === "string" ? req.query.url : "";
+      res.json(await analyzeSitemap(requestedUrl));
+    } catch (error) {
+      const isPublicError = Number.isInteger(error.statusCode);
+      res.status(isPublicError ? error.statusCode : 502).json({
+        error: isPublicError ? error.message : "The sitemap could not be analyzed.",
+      });
+    }
+  });
+
   app.get("/report.md", analysisLimiter, async (req, res) => {
     try {
       const requestedUrl = typeof req.query.url === "string" ? req.query.url : "";
@@ -556,6 +652,19 @@ function createApp({
       res.status(isPublicError ? error.statusCode : 502).type("text").send(
         isPublicError ? error.message : "The target website could not be analyzed.",
       );
+    }
+  });
+
+  app.get("/site", analysisLimiter, async (req, res) => {
+    const requestedUrl = typeof req.query.url === "string" ? req.query.url : "";
+    const form = renderAnalyzerForm({ activeMode: "sitemap", sitemapUrl: requestedUrl });
+    try {
+      const site = await analyzeSitemap(requestedUrl);
+      res.type("html").send(renderPage(form, renderSiteAudit(site)));
+    } catch (error) {
+      const isPublicError = Number.isInteger(error.statusCode);
+      res.status(isPublicError ? error.statusCode : 502);
+      res.type("html").send(renderPage(form, renderError(error, "The sitemap could not be analyzed.")));
     }
   });
 
