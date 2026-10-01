@@ -45,16 +45,14 @@ function renderAnalysis(html, targetUrl) {
 
   const ogTitle = metaContent($, 'meta[property="og:title"]');
   const ogDescription = metaContent($, 'meta[property="og:description"]');
+  const rawOgImage = metaContent($, 'meta[property="og:image"]');
+  const rawOgUrl = metaContent($, 'meta[property="og:url"]');
   const ogImage = safeWebUrl(
-    metaContent($, 'meta[property="og:image"]'),
+    rawOgImage,
     targetUrl,
     PLACEHOLDER_IMAGE,
   );
-  const ogUrl = safeWebUrl(
-    metaContent($, 'meta[property="og:url"]'),
-    targetUrl,
-    targetUrl,
-  );
+  const ogUrl = safeWebUrl(rawOgUrl, targetUrl, targetUrl);
   const twitterCard = metaContent($, 'meta[name="twitter:card"]');
   const twitterTitle = metaContent($, 'meta[name="twitter:title"]');
   const twitterDescription = metaContent(
@@ -124,9 +122,11 @@ function renderAnalysis(html, targetUrl) {
     {
       name: "Open Graph Tags",
       status:
-        ogTitle && ogDescription && ogImage && ogUrl ? "Complete" : "Incomplete",
+        ogTitle && ogDescription && rawOgImage && rawOgUrl
+          ? "Complete"
+          : "Incomplete",
       suggestion:
-        ogTitle && ogDescription && ogImage && ogUrl
+        ogTitle && ogDescription && rawOgImage && rawOgUrl
           ? "Looks good!"
           : "Ensure all required OG tags are present: og:title, og:description, og:image, and og:url.",
     },

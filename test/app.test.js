@@ -60,6 +60,26 @@ test("summarizes audit health and exposes semantic result statuses", async () =>
   assert.match(response.text, /Search result preview/);
 });
 
+test("does not count fallback URLs as complete Open Graph metadata", async () => {
+  const partialOpenGraphHtml = `
+    <title>Partial metadata fixture</title>
+    <meta property="og:title" content="Partial Open Graph title">
+    <meta property="og:description" content="Partial Open Graph description">`;
+  const app = createApp({ pageFetcher: async () => partialOpenGraphHtml });
+  const response = await request(app)
+    .get("/")
+    .query({ url: "https://example.com/source" })
+    .expect(200);
+
+  const openGraphAuditItem = response.text.match(
+    /<article class="audit-item">(?:(?!<\/article>)[\s\S])*Open Graph Tags(?:(?!<\/article>)[\s\S])*<\/article>/,
+  );
+  assert.ok(openGraphAuditItem);
+  assert.match(openGraphAuditItem[0], /status--attention/);
+  assert.match(openGraphAuditItem[0], /Incomplete/);
+  assert.match(response.text, /src="\/preview-placeholder\.svg"/);
+});
+
 test("serves the local responsive stylesheet", async () => {
   const app = createApp();
   const response = await request(app).get("/styles.css").expect(200);
