@@ -57,6 +57,103 @@ test("renders a successful SEO and social metadata audit", async () => {
   assert.match(response.text, /SEO Audit/);
 });
 
+test("renders Slack and WhatsApp previews with URL sharing actions", async () => {
+  const app = createApp({
+    pageFetcher: async () => fixtureHtml,
+    imageInspector: successfulImageInspector,
+  });
+  const response = await request(app)
+    .get("/")
+    .query({ url: "https://example.com/source" })
+    .expect(200);
+
+  assert.match(response.text, />Slack</);
+  assert.match(response.text, />WhatsApp</);
+  assert.match(response.text, /data-preview-platform="slack"/);
+  assert.match(response.text, /data-preview-platform="whatsapp"/);
+  assert.match(response.text, /data-copy-audit-link/);
+  assert.match(response.text, /href="\/api\/analyze\?url=https%3A%2F%2Fexample\.com%2Fsource"/);
+  assert.match(response.text, /href="\/report\.md\?url=https%3A%2F%2Fexample\.com%2Fsource"/);
+});
+
+test("exposes a stable JSON analysis API", async () => {
+  const app = createApp({
+    pageFetcher: async () => fixtureHtml,
+    imageInspector: successfulImageInspector,
+  });
+  const response = await request(app)
+    .get("/api/analyze")
+    .query({ url: "https://example.com/source" })
+    .expect("Content-Type", /json/)
+    .expect(200);
+
+  assert.equal(response.body.schemaVersion, 1);
+  assert.equal(response.body.url, "https://example.com/source");
+  assert.equal(response.body.source.mode, "url");
+  assert.equal(response.body.metadata.title, "A useful fixture title for search results");
+  assert.equal(typeof response.body.score.value, "number");
+  assert.ok(response.body.checks.some((check) => check.id === "og-title"));
+  assert.equal(response.body.images.openGraph.width, 1200);
+});
+
+test("returns safe JSON API validation and upstream errors", async () => {
+  const app = createApp({
+    pageFetcher: async () => {
+      throw new Error("sensitive upstream detail");
+    },
+  });
+
+  const missing = await request(app).get("/api/analyze").expect(400);
+  assert.deepEqual(missing.body, { error: "A URL is required." });
+
+  const failed = await request(app)
+    .get("/api/analyze")
+    .query({ url: "https://example.com" })
+    .expect(502);
+  assert.deepEqual(failed.body, { error: "The target website could not be analyzed." });
+  assert.doesNotMatch(JSON.stringify(failed.body), /sensitive upstream detail/);
+});
+
+test("keeps API rate-limit errors in the JSON contract", async () => {
+  const app = createApp({
+    pageFetcher: async () => fixtureHtml,
+    imageInspector: successfulImageInspector,
+    rateLimitOptions: { limit: 1 },
+  });
+
+  await request(app)
+    .get("/api/analyze")
+    .query({ url: "https://example.com" })
+    .expect(200);
+  const limited = await request(app)
+    .get("/api/analyze")
+    .query({ url: "https://example.com" })
+    .expect("Content-Type", /json/)
+    .expect(429);
+
+  assert.deepEqual(limited.body, {
+    error: "Too many analysis requests. Please try again later.",
+  });
+});
+
+test("downloads a Markdown audit report for a public URL", async () => {
+  const app = createApp({
+    pageFetcher: async () => fixtureHtml,
+    imageInspector: successfulImageInspector,
+  });
+  const response = await request(app)
+    .get("/report.md")
+    .query({ url: "https://example.com/source" })
+    .expect("Content-Type", /text\/markdown/)
+    .expect(200);
+
+  assert.match(response.headers["content-disposition"], /attachment; filename="metascope-report\.md"/);
+  assert.match(response.text, /# MetaScope audit: https:\/\/example\.com\/source/);
+  assert.match(response.text, /Score: \*\*\d+\/100\*\*/);
+  assert.match(response.text, /\| Status \| Category \| Check \| Finding \|/);
+  assert.match(response.text, /Fixture Open Graph title/);
+});
+
 test("explains the product and next step on the landing page", async () => {
   const app = createApp();
   const response = await request(app).get("/").expect(200);
@@ -279,6 +376,7 @@ test("serves the local editor script without unsafe DOM insertion", async () => 
 
   assert.match(response.headers["content-type"], /javascript/);
   assert.match(response.text, /textContent/);
+  assert.match(response.text, /data-copy-audit-link/);
   assert.doesNotMatch(response.text, /\.innerHTML\s*=/);
 });
 

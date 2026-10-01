@@ -13,6 +13,20 @@
     });
   });
 
+  const copyAuditLink = document.querySelector("[data-copy-audit-link]");
+  if (copyAuditLink) {
+    const shareStatus = document.querySelector("[data-share-status]");
+    copyAuditLink.addEventListener("click", async () => {
+      const auditUrl = new URL(copyAuditLink.dataset.auditPath, window.location.origin).toString();
+      try {
+        await navigator.clipboard.writeText(auditUrl);
+        shareStatus.textContent = "Audit link copied.";
+      } catch {
+        shareStatus.textContent = "Copy the audit URL from your browser address bar.";
+      }
+    });
+  }
+
   const editor = document.querySelector("[data-metadata-editor]");
   if (!editor || !globalThis.MetaScopeTags) return;
 

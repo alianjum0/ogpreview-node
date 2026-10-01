@@ -4,7 +4,7 @@
   "description": "A Node.js application that performs a basic SEO audit and displays social media previews based on a website's meta tags.",
   "main": "server.js",
   "scripts": {
-    "check:syntax": "node --check server.js && node --check lib/safe-fetch.js",
+    "check:syntax": "node --check server.js && node --check lib/analyze.js && node --check lib/audit.js && node --check lib/image-inspector.js && node --check lib/metadata.js && node --check lib/report.js && node --check lib/safe-fetch.js && node --check public/app.js && node --check public/tag-generator.js",
     "start": "node server.js",
     "test": "node --test",
     "test:ui": "node --test test/app.test.js",

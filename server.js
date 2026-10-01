@@ -5,6 +5,7 @@ const helmet = require("helmet");
 const { analyzeDocument, analyzeHtml } = require("./lib/analyze");
 const { fetchImage, inspectImage } = require("./lib/image-inspector");
 const { safeWebUrl } = require("./lib/metadata");
+const { serializeAnalysis, toMarkdownReport } = require("./lib/report");
 const { fetchPage, normalizeTargetUrl } = require("./lib/safe-fetch");
 const { generateTags } = require("./public/tag-generator");
 
@@ -88,6 +89,21 @@ function renderEditor(metadata) {
       </label>
     </form>
   </section>`;
+}
+
+function renderShareActions(analysis) {
+  if (analysis.source.mode !== "url") return "";
+  const requestedUrl = analysis.source.requestedUrl || analysis.source.finalUrl;
+  if (!requestedUrl) return "";
+  const query = `url=${encodeURIComponent(requestedUrl)}`;
+  const auditPath = `/?${query}`;
+
+  return `<div class="result-actions" aria-label="Share and export audit">
+    <button type="button" class="secondary-button" data-copy-audit-link data-audit-path="${escapeHtml(auditPath)}">Copy audit link</button>
+    <a class="secondary-button" href="/api/analyze?${query}" target="_blank" rel="noopener noreferrer">Export JSON</a>
+    <a class="secondary-button" href="/report.md?${query}" download>Download report</a>
+    <span role="status" aria-live="polite" data-share-status></span>
+  </div>`;
 }
 
 function renderAnalysis(htmlOrAnalysis, targetUrl) {
@@ -180,6 +196,7 @@ function renderAnalysis(htmlOrAnalysis, targetUrl) {
           <a class="source-link" href="${safeOgUrl}" target="_blank" rel="noopener noreferrer">
             <span aria-hidden="true">↗</span> ${safeOgUrl}
           </a>
+          ${renderShareActions(analysis)}
         </div>
         <div class="score" aria-label="Metadata score ${score.value} out of 100">
           <strong>${score.value}</strong>
@@ -258,6 +275,37 @@ function renderAnalysis(htmlOrAnalysis, targetUrl) {
             <img src="${safeOgImage}" data-preview-image="og" alt="LinkedIn link preview image">
             <div class="social-card__body">
               <h3 data-preview="og-title">${facebookTitle}</h3>
+              <span data-preview="url">${safeOgUrl}</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="social-preview social-preview--slack surface" data-preview-platform="slack">
+          <div class="preview-label">
+            <span class="preview-icon preview-icon--slack" aria-hidden="true">#</span>
+            <div><strong>Slack</strong><span>Open Graph unfurl</span></div>
+          </div>
+          <div class="message-preview message-preview--slack">
+            <span class="message-preview__accent" aria-hidden="true"></span>
+            <div class="message-preview__body">
+              <span data-preview="url">${safeOgUrl}</span>
+              <h3 data-preview="og-title">${facebookTitle}</h3>
+              <p data-preview="og-description">${facebookDescription}</p>
+              <img src="${safeOgImage}" data-preview-image="og" alt="Slack link preview image">
+            </div>
+          </div>
+        </article>
+
+        <article class="social-preview social-preview--whatsapp surface" data-preview-platform="whatsapp">
+          <div class="preview-label">
+            <span class="preview-icon preview-icon--whatsapp" aria-hidden="true">W</span>
+            <div><strong>WhatsApp</strong><span>Message link preview</span></div>
+          </div>
+          <div class="message-preview message-preview--whatsapp">
+            <img src="${safeOgImage}" data-preview-image="og" alt="WhatsApp link preview image">
+            <div class="message-preview__body">
+              <h3 data-preview="og-title">${facebookTitle}</h3>
+              <p data-preview="og-description">${facebookDescription}</p>
               <span data-preview="url">${safeOgUrl}</span>
             </div>
           </div>
@@ -411,6 +459,16 @@ function createApp({
   const parseHtmlForm = express.urlencoded({ extended: false, limit: "256kb" });
 
   const analysisLimiter = rateLimit({
+    handler: (req, res, _next, options) => {
+      const message = typeof options.message === "string"
+        ? options.message
+        : "Too many analysis requests. Please try again later.";
+      if (req.path.startsWith("/api/")) {
+        res.status(options.statusCode).json({ error: message });
+        return;
+      }
+      res.status(options.statusCode).type("text").send(message);
+    },
     legacyHeaders: false,
     limit: 30,
     message: "Too many analysis requests. Please try again later.",
@@ -418,6 +476,17 @@ function createApp({
     windowMs: 15 * 60 * 1000,
     ...rateLimitOptions,
   });
+
+  const analyzeUrl = async (value) => {
+    if (!value) {
+      const error = new Error("A URL is required.");
+      error.statusCode = 400;
+      throw error;
+    }
+    const requestedUrl = normalizeTargetUrl(value);
+    const html = await pageFetcher(requestedUrl);
+    return analyzeDocument(html, requestedUrl, { imageInspector, mode: "url" });
+  };
 
   app.get(
     "/",
@@ -437,7 +506,7 @@ function createApp({
           <article>
             <span class="feature-icon feature-icon--blue" aria-hidden="true">02</span>
             <h2>Preview every share</h2>
-            <p>See how your page can appear across search, Facebook, X, and LinkedIn.</p>
+            <p>See how your page can appear across search, Facebook, X, LinkedIn, Slack, and WhatsApp.</p>
           </article>
           <article>
             <span class="feature-icon feature-icon--green" aria-hidden="true">03</span>
@@ -448,8 +517,7 @@ function createApp({
 
       if (requestedUrl) {
         try {
-          const html = await pageFetcher(requestedUrl);
-          const analysis = await analyzeDocument(html, requestedUrl, { imageInspector, mode: "url" });
+          const analysis = await analyzeUrl(requestedUrl);
           content = renderAnalysis(analysis);
         } catch (error) {
           const isPublicError = Number.isInteger(error.statusCode);
@@ -461,6 +529,35 @@ function createApp({
       res.type("html").send(renderPage(form, content));
     },
   );
+
+  app.get("/api/analyze", analysisLimiter, async (req, res) => {
+    try {
+      const requestedUrl = typeof req.query.url === "string" ? req.query.url : "";
+      const analysis = await analyzeUrl(requestedUrl);
+      res.json(serializeAnalysis(analysis));
+    } catch (error) {
+      const isPublicError = Number.isInteger(error.statusCode);
+      res.status(isPublicError ? error.statusCode : 502).json({
+        error: isPublicError ? error.message : "The target website could not be analyzed.",
+      });
+    }
+  });
+
+  app.get("/report.md", analysisLimiter, async (req, res) => {
+    try {
+      const requestedUrl = typeof req.query.url === "string" ? req.query.url : "";
+      const analysis = await analyzeUrl(requestedUrl);
+      res
+        .attachment("metascope-report.md")
+        .type("text/markdown")
+        .send(toMarkdownReport(analysis));
+    } catch (error) {
+      const isPublicError = Number.isInteger(error.statusCode);
+      res.status(isPublicError ? error.statusCode : 502).type("text").send(
+        isPublicError ? error.message : "The target website could not be analyzed.",
+      );
+    }
+  });
 
   app.post("/analyze/html", analysisLimiter, parseHtmlForm, async (req, res) => {
     const pastedHtml = typeof req.body.html === "string" ? req.body.html : "";
