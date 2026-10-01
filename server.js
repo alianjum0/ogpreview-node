@@ -325,26 +325,26 @@ function renderPage(form, content) {
       <meta name="description" content="Audit SEO metadata and preview how any public webpage appears when shared.">
       <meta name="theme-color" content="#f7f7fb">
       <title>MetaScope — SEO Audit & Social Preview</title>
-      <link href="/styles.css" rel="stylesheet">
+      <link href="/styles.css?v=2" rel="stylesheet">
     </head>
     <body>
       <header class="site-header shell">
         <a class="brand" href="/" aria-label="MetaScope home">
           <span class="brand__mark" aria-hidden="true"><span></span></span>
-          <span>MetaScope</span>
+          <span class="brand__name">MetaScope</span>
+          <span class="brand__descriptor">Metadata debugger</span>
         </a>
-        <span class="project-badge"><span aria-hidden="true">◆</span> Portfolio project</span>
       </header>
       <main>
         <section class="hero shell">
           <div class="hero__copy">
-            <p class="eyebrow"><span aria-hidden="true"></span> SEO + social metadata inspector</p>
+            <p class="eyebrow"><span aria-hidden="true">~/</span> SEO + social metadata inspector</p>
             <h1 aria-label="Preview how your page appears before you share it.">Preview how your page appears <em>before you share it.</em></h1>
             <p class="hero__lede">Audit essential SEO tags and see realistic search and social previews in one focused report.</p>
             <ul class="trust-list" aria-label="Project benefits">
-              <li><span aria-hidden="true">✓</span> No signup. No API key.</li>
-              <li><span aria-hidden="true">✓</span> Secure public-URL analysis</li>
-              <li><span aria-hidden="true">✓</span> Results in seconds</li>
+              <li><span aria-hidden="true">01</span> No signup. No API key.</li>
+              <li><span aria-hidden="true">02</span> SSRF-protected requests</li>
+              <li><span aria-hidden="true">03</span> Server-rendered results</li>
             </ul>
           </div>
           ${form}
@@ -399,37 +399,37 @@ function createApp({
       const form = `
         <form method="GET" action="/" class="analyzer-panel surface">
           <div class="analyzer-panel__header">
-            <span class="analyzer-panel__icon" aria-hidden="true">⌁</span>
+            <span class="analyzer-panel__icon" aria-hidden="true">{ }</span>
             <div>
               <h2>Analyze a webpage</h2>
-              <p>Enter a public page URL to get started.</p>
+              <p>Fetch and inspect the rendered metadata.</p>
             </div>
           </div>
           <label for="url">Enter a public page URL</label>
           <div class="url-field">
-            <span class="url-field__icon" aria-hidden="true">⌕</span>
+            <span class="request-method">GET</span>
             <input id="url" type="url" name="url" placeholder="https://example.com" value="${escapeHtml(requestedUrl)}" autocomplete="url" inputmode="url" required>
           </div>
           <button class="primary-button" type="submit">
             Run free audit <span aria-hidden="true">→</span>
           </button>
-          <p class="form-note"><span aria-hidden="true">◈</span> Only publicly accessible HTML pages can be analyzed.</p>
+          <p class="form-note"><span aria-hidden="true">$</span> public HTML only · 2 MB max · 10s timeout</p>
         </form>`;
 
       let content = `
         <section class="feature-grid" aria-label="What MetaScope checks">
           <article>
-            <span class="feature-icon feature-icon--violet" aria-hidden="true">⌕</span>
+            <span class="feature-icon feature-icon--violet" aria-hidden="true">01</span>
             <h2>Audit SEO essentials</h2>
             <p>Check titles, descriptions, headings, canonical URLs, language, and crawl settings.</p>
           </article>
           <article>
-            <span class="feature-icon feature-icon--blue" aria-hidden="true">▣</span>
+            <span class="feature-icon feature-icon--blue" aria-hidden="true">02</span>
             <h2>Preview every share</h2>
             <p>See how your page can appear across search, Facebook, X, and LinkedIn.</p>
           </article>
           <article>
-            <span class="feature-icon feature-icon--green" aria-hidden="true">✓</span>
+            <span class="feature-icon feature-icon--green" aria-hidden="true">03</span>
             <h2>Spot fixes quickly</h2>
             <p>Scan clear pass states and practical opportunities without digging through source.</p>
           </article>

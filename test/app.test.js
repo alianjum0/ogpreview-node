@@ -41,6 +41,9 @@ test("explains the product and next step on the landing page", async () => {
   assert.match(response.text, /Enter a public page URL/);
   assert.match(response.text, /Run free audit/);
   assert.match(response.text, /No signup\. No API key\./);
+  assert.match(response.text, /Metadata debugger/);
+  assert.match(response.text, /request-method">GET/);
+  assert.doesNotMatch(response.text, /Portfolio project/);
 });
 
 test("summarizes audit health and exposes semantic result statuses", async () => {
