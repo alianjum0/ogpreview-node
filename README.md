@@ -11,6 +11,8 @@ A compact Node.js application that audits a public webpage or pasted HTML, expla
 - Edits draft metadata with instant preview updates and generated `<head>` tags.
 - Exposes the same URL analyzer through a versioned JSON response.
 - Copies shareable audit links and exports JSON or Markdown reports without storage.
+- Audits up to 10 same-origin sitemap pages for scores, failures, and duplicate metadata.
+- Validates JSON-LD syntax and reports detected Schema.org-style `@type` values.
 - Lists discovered Open Graph and Twitter metadata for inspection.
 - Resolves relative preview URLs against the audited page.
 - Returns clear errors for invalid, unreachable, oversized, slow, or non-HTML targets.
@@ -26,6 +28,8 @@ Because the application fetches user-provided URLs, outbound requests are treate
 - Image requests reuse the SSRF boundary with a 7-second timeout and 5 MB limit.
 - Preview images are loaded through a bounded same-origin route instead of directly from metadata-controlled hosts.
 - Pasted HTML is processed in memory and capped at 256 KB.
+- Sitemaps use the same SSRF-safe 2 MB fetch boundary and may include up to three same-origin child sitemaps.
+- Site audits fetch at most 10 same-origin pages with three concurrent requests.
 - Non-HTML responses are rejected.
 - Metadata and URL attributes are escaped or sanitized before rendering.
 - Helmet security headers, a Content Security Policy, and per-IP rate limiting are enabled.
@@ -85,6 +89,14 @@ GET /report.md?url=https%3A%2F%2Fexample.com
 
 URL results also include controls to copy the reproducible audit URL, open the JSON export, or download the Markdown report. Pasted HTML stays local to the request and therefore does not expose share/export controls.
 
+Audit a sitemap through the UI at `/site?url=...` or as JSON:
+
+```http
+GET /api/site?url=https%3A%2F%2Fexample.com%2Fsitemap.xml
+```
+
+The site response includes discovery limits, success/failure totals, average score, duplicate titles/descriptions/canonicals, structured-data summaries, and page-level checks. Sitemap indexes are followed one level deep, with at most three same-origin child sitemaps.
+
 If the application runs behind a reverse proxy, set the number of trusted proxy hops so rate limiting uses the client address safely:
 
 ```bash
@@ -114,6 +126,8 @@ The test suite covers:
 - Slack and WhatsApp preview rendering
 - URL and pasted-HTML analysis modes
 - Stable JSON analysis and Markdown report exports
+- Bounded sitemap parsing, aggregation, and same-origin enforcement
+- JSON-LD syntax and `@type` summaries
 - Deterministic audit rules and scoring
 - Bounded social-image inspection and safe same-origin previews
 - Generated metadata-tag escaping and unsafe URL omission
@@ -130,7 +144,8 @@ The test suite covers:
 │   ├── image-inspector.js    # Bounded social-image validation
 │   ├── metadata.js           # Normalized metadata parsing
 │   ├── report.js             # Public JSON and Markdown serializers
-│   └── safe-fetch.js         # URL validation and bounded page fetching
+│   ├── safe-fetch.js         # URL validation and bounded page fetching
+│   └── site-audit.js         # Bounded sitemap and cross-page analysis
 ├── public/
 │   ├── app.js                # Input tabs and live draft previews
 │   ├── tag-generator.js      # Shared browser/server tag generation
@@ -155,6 +170,8 @@ The previous Heroku demo is no longer linked because it currently returns 404.
 - Public websites may block automated requests or return different metadata based on geography or user agent.
 - Draft edits update previews and generated tags but do not recalculate the source-page audit.
 - Share links and exports rerun the live URL analysis; results can change when the target page changes.
+- Site audits intentionally stop after 10 pages and one sitemap-index level; they are not a general-purpose crawler.
+- Structured-data checks validate JSON-LD syntax and declared types, not full Schema.org vocabulary requirements.
 
 ## License
 

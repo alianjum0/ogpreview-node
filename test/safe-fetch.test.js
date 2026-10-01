@@ -3,6 +3,7 @@ const test = require("node:test");
 const {
   createSafeLookup,
   fetchPage,
+  fetchSitemap,
   isBlockedAddress,
   normalizeTargetUrl,
 } = require("../lib/safe-fetch");
@@ -114,5 +115,38 @@ test("maps request timeouts to a safe public error", async () => {
   await assert.rejects(
     fetchPage("https://example.test/slow", { client }),
     /took too long to respond/,
+  );
+});
+
+test("fetches bounded XML sitemaps through the same safe request boundary", async () => {
+  let request;
+  const client = {
+    async get(url, options) {
+      request = { url, options };
+      return {
+        data: "<urlset><url><loc>https://example.test/</loc></url></urlset>",
+        headers: { "content-type": "application/xml; charset=utf-8" },
+      };
+    },
+  };
+
+  const xml = await fetchSitemap("https://example.test/sitemap.xml", { client });
+
+  assert.match(xml, /urlset/);
+  assert.match(request.options.headers.Accept, /application\/xml/);
+  assert.equal(request.options.maxContentLength, 2 * 1024 * 1024);
+  assert.equal(request.options.proxy, false);
+});
+
+test("rejects non-XML sitemap responses", async () => {
+  const client = {
+    async get() {
+      return { data: "{}", headers: { "content-type": "application/json" } };
+    },
+  };
+
+  await assert.rejects(
+    fetchSitemap("https://example.test/sitemap.xml", { client }),
+    /did not return an XML sitemap/,
   );
 });

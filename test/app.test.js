@@ -154,6 +154,68 @@ test("downloads a Markdown audit report for a public URL", async () => {
   assert.match(response.text, /Fixture Open Graph title/);
 });
 
+test("offers a bounded sitemap audit and renders site-level findings", async () => {
+  const sitemap = `<urlset>
+    <url><loc>https://example.com/a</loc></url>
+    <url><loc>https://example.com/b</loc></url>
+  </urlset>`;
+  const app = createApp({
+    sitemapFetcher: async () => sitemap,
+    pageFetcher: async () => fixtureHtml,
+  });
+
+  const landing = await request(app).get("/").expect(200);
+  assert.match(landing.text, /data-input-mode="sitemap"/);
+  assert.match(landing.text, /action="\/site"/);
+
+  const response = await request(app)
+    .get("/site")
+    .query({ url: "https://example.com/sitemap.xml" })
+    .expect(200);
+
+  assert.match(response.text, /Site audit/);
+  assert.match(response.text, /2 pages analyzed/);
+  assert.match(response.text, /Duplicate titles/);
+  assert.match(response.text, /https:\/\/example\.com\/a/);
+  assert.match(response.text, /https:\/\/example\.com\/b/);
+});
+
+test("exposes the bounded site audit as JSON", async () => {
+  const app = createApp({
+    sitemapFetcher: async () => '<urlset><url><loc>https://example.com/a</loc></url></urlset>',
+    pageFetcher: async () => fixtureHtml,
+  });
+  const response = await request(app)
+    .get("/api/site")
+    .query({ url: "https://example.com/sitemap.xml" })
+    .expect("Content-Type", /json/)
+    .expect(200);
+
+  assert.equal(response.body.schemaVersion, 1);
+  assert.equal(response.body.source.sitemapUrl, "https://example.com/sitemap.xml");
+  assert.equal(response.body.summary.total, 1);
+  assert.equal(response.body.pages[0].url, "https://example.com/a");
+  assert.equal(response.body.limits.maxPages, 10);
+});
+
+test("returns safe site API validation and upstream errors", async () => {
+  const app = createApp({
+    sitemapFetcher: async () => {
+      throw new Error("sensitive sitemap detail");
+    },
+  });
+
+  const missing = await request(app).get("/api/site").expect(400);
+  assert.deepEqual(missing.body, { error: "Enter a valid HTTP or HTTPS URL." });
+
+  const failed = await request(app)
+    .get("/api/site")
+    .query({ url: "https://example.com/sitemap.xml" })
+    .expect(502);
+  assert.deepEqual(failed.body, { error: "The sitemap could not be analyzed." });
+  assert.doesNotMatch(JSON.stringify(failed.body), /sensitive sitemap detail/);
+});
+
 test("explains the product and next step on the landing page", async () => {
   const app = createApp();
   const response = await request(app).get("/").expect(200);

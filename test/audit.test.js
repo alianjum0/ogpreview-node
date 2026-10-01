@@ -117,3 +117,16 @@ test("does not claim text consistency when the heuristic cannot tokenize it", ()
   assert.equal(check(report, "og-title-consistency").status, "info");
   assert.equal(check(report, "og-description-consistency").status, "info");
 });
+
+test("reports structured-data validity without penalizing absent optional markup", () => {
+  const absent = analyze("<title>Only a short title</title><h1>Heading</h1>");
+  assert.equal(check(absent, "structured-data").status, "info");
+
+  const valid = analyze('<script type="application/ld+json">{"@type":"Article"}</script>');
+  assert.equal(check(valid, "structured-data").status, "pass");
+  assert.match(check(valid, "structured-data").evidence, /Article/);
+
+  const invalid = analyze('<script type="application/ld+json">{"@type":</script>');
+  assert.equal(check(invalid, "structured-data").status, "error");
+  assert.match(check(invalid, "structured-data").message, /invalid JSON-LD/i);
+});

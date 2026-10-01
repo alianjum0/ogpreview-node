@@ -1003,6 +1003,87 @@ summary:focus-visible {
   margin: 0;
 }
 
+.site-results {
+  padding: 10px 0 88px;
+}
+
+.site-table {
+  overflow-x: auto;
+  border-radius: 10px;
+}
+
+.site-table table {
+  width: 100%;
+  min-width: 840px;
+  border-collapse: collapse;
+}
+
+.site-table th,
+.site-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.76rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.site-table th {
+  color: var(--muted);
+  background: #f8f8fb;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  text-transform: uppercase;
+}
+
+.site-table a {
+  display: block;
+  max-width: 280px;
+  overflow: hidden;
+  color: var(--violet-dark);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.duplicate-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  padding: 22px;
+  border-radius: 10px;
+}
+
+.duplicate-group h3 {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+}
+
+.duplicate-group p {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.duplicate-group__item {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.duplicate-group__item strong,
+.duplicate-group__item span {
+  overflow-wrap: anywhere;
+}
+
+.duplicate-group__item strong {
+  font-size: 0.76rem;
+}
+
+.duplicate-group__item span {
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+
 @media (max-width: 900px) {
   .hero {
     grid-template-columns: 1fr;
@@ -1024,6 +1105,10 @@ summary:focus-visible {
 
   .audit-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .duplicate-grid {
+    grid-template-columns: 1fr;
   }
 
   .preview-layout {
@@ -1189,7 +1274,7 @@ summary:focus-visible {
 
 .input-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 4px;
   margin-bottom: 22px;
   padding: 4px;
