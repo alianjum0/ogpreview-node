@@ -20,16 +20,40 @@ const fixtureHtml = `<!doctype html>
     <body><h1>Fixture heading</h1></body>
   </html>`;
 
+const successfulImageInspector = async (url) => ({
+  url,
+  reachable: true,
+  contentType: "image/png",
+  bytes: 184000,
+  width: 1200,
+  height: 630,
+  aspectRatio: 1.9,
+  recommendedDimensions: true,
+  https: true,
+});
+
 test("renders a successful SEO and social metadata audit", async () => {
-  const app = createApp({ pageFetcher: async () => fixtureHtml });
+  const app = createApp({
+    pageFetcher: async () => fixtureHtml,
+    imageInspector: successfulImageInspector,
+  });
   const response = await request(app)
     .get("/")
     .query({ url: "https://example.com/source" })
     .expect(200);
 
   assert.match(response.text, /Fixture Open Graph title/);
-  assert.match(response.text, /https:\/\/example\.com\/social\.png/);
+  assert.match(response.text, /url=https%3A%2F%2Fexample\.com%2Fsocial\.png/);
   assert.match(response.text, /https:\/\/example\.com\/article/);
+  assert.match(response.text, /1200 × 630/);
+  assert.match(response.text, /184 KB/);
+  assert.doesNotMatch(response.text, /src="https:\/\/example\.com\/social\.png"/);
+  assert.match(response.text, /src="\/preview-image\?url=/);
+  assert.match(response.text, /data-metadata-editor/);
+  assert.match(response.text, /name="ogTitle" value="Fixture Open Graph title"/);
+  assert.match(response.text, /data-generated-tags/);
+  assert.match(response.text, /src="\/tag-generator\.js"/);
+  assert.match(response.text, /src="\/app\.js"/);
   assert.match(response.text, /SEO Audit/);
 });
 
@@ -47,16 +71,20 @@ test("explains the product and next step on the landing page", async () => {
 });
 
 test("summarizes audit health and exposes semantic result statuses", async () => {
-  const app = createApp({ pageFetcher: async () => fixtureHtml });
+  const app = createApp({
+    pageFetcher: async () => fixtureHtml,
+    imageInspector: successfulImageInspector,
+  });
   const response = await request(app)
     .get("/")
     .query({ url: "https://example.com/source" })
     .expect(200);
 
   assert.match(response.text, /Audit results/);
-  assert.match(response.text, /checks ready/);
+  assert.match(response.text, /metadata score/);
+  assert.match(response.text, /errors · \d+ warnings · \d+ passed/);
   assert.match(response.text, /class="status status--pass"/);
-  assert.match(response.text, /class="status status--attention"/);
+  assert.match(response.text, /class="status status--warning"/);
   assert.match(response.text, /Search result preview/);
 });
 
@@ -71,13 +99,69 @@ test("does not count fallback URLs as complete Open Graph metadata", async () =>
     .query({ url: "https://example.com/source" })
     .expect(200);
 
-  const openGraphAuditItem = response.text.match(
-    /<article class="audit-item">(?:(?!<\/article>)[\s\S])*Open Graph Tags(?:(?!<\/article>)[\s\S])*<\/article>/,
-  );
-  assert.ok(openGraphAuditItem);
-  assert.match(openGraphAuditItem[0], /status--attention/);
-  assert.match(openGraphAuditItem[0], /Incomplete/);
+  assert.match(response.text, /Open Graph image/);
+  assert.match(response.text, /Add og:image/);
+  assert.match(response.text, /Open Graph URL/);
+  assert.match(response.text, /Add og:url/);
   assert.match(response.text, /src="\/preview-placeholder\.svg"/);
+});
+
+test("offers URL and pasted HTML analysis modes", async () => {
+  const app = createApp();
+  const response = await request(app).get("/").expect(200);
+
+  assert.match(response.text, /data-input-mode="url"/);
+  assert.match(response.text, /data-input-mode="html"/);
+  assert.match(response.text, /action="\/analyze\/html"/);
+  assert.match(response.text, /name="html"/);
+  assert.match(response.text, /name="baseUrl"/);
+});
+
+test("analyzes pasted HTML without calling the page fetcher", async () => {
+  let fetchCount = 0;
+  const app = createApp({
+    pageFetcher: async () => {
+      fetchCount += 1;
+      throw new Error("must not fetch");
+    },
+    imageInspector: successfulImageInspector,
+  });
+
+  const response = await request(app)
+    .post("/analyze/html")
+    .type("form")
+    .send({
+      baseUrl: "https://example.com/draft",
+      html: '<title>Pasted draft</title><meta property="og:image" content="/draft.png"><h1>Draft</h1>',
+    })
+    .expect(200);
+
+  assert.equal(fetchCount, 0);
+  assert.match(response.text, /Pasted draft/);
+  assert.match(response.text, /url=https%3A%2F%2Fexample\.com%2Fdraft\.png/);
+});
+
+test("rejects unsafe HTML base URLs", async () => {
+  const app = createApp();
+  const response = await request(app)
+    .post("/analyze/html")
+    .type("form")
+    .send({ baseUrl: "http://127.0.0.1/private", html: "<title>Draft</title>" })
+    .expect(400);
+
+  assert.match(response.text, /Private and local network addresses are not allowed/);
+});
+
+test("bounds pasted HTML input", async () => {
+  const app = createApp();
+  const response = await request(app)
+    .post("/analyze/html")
+    .type("form")
+    .send({ html: `<title>${"x".repeat(300 * 1024)}</title>` })
+    .expect(413);
+
+  assert.match(response.text, /Pasted HTML must be 256 KB or smaller/);
+  assert.doesNotMatch(response.text, /PayloadTooLargeError/);
 });
 
 test("serves the local responsive stylesheet", async () => {
@@ -145,6 +229,10 @@ test("sets security headers and hides the Express signature", async () => {
   const response = await request(app).get("/").expect(200);
 
   assert.match(response.headers["content-security-policy"], /default-src 'self'/);
+  assert.match(response.headers["content-security-policy"], /script-src 'self'/);
+  assert.doesNotMatch(response.headers["content-security-policy"], /script-src 'unsafe-inline'/);
+  assert.match(response.headers["content-security-policy"], /img-src 'self' data:/);
+  assert.doesNotMatch(response.headers["content-security-policy"], /img-src[^;]*https:/);
   assert.equal(response.headers["x-content-type-options"], "nosniff");
   assert.equal(response.headers["x-powered-by"], undefined);
   assert.equal(app.get("trust proxy"), false);
@@ -154,11 +242,44 @@ test("sets security headers and hides the Express signature", async () => {
 test("rate limits repeated analysis requests", async () => {
   const app = createApp({
     pageFetcher: async () => fixtureHtml,
+    imageInspector: successfulImageInspector,
     rateLimitOptions: { limit: 1 },
   });
 
   await request(app).get("/").query({ url: "https://example.com" }).expect(200);
   await request(app).get("/").query({ url: "https://example.com" }).expect(429);
+});
+
+test("serves validated preview images through the same-origin route", async () => {
+  let requestedUrl;
+  const app = createApp({
+    imageFetcher: async (url) => {
+      requestedUrl = url;
+      return {
+        url,
+        contentType: "image/png",
+        buffer: Buffer.from("safe-image"),
+      };
+    },
+  });
+
+  const response = await request(app)
+    .get("/preview-image")
+    .query({ url: "https://example.com/social.png" })
+    .expect(200);
+
+  assert.equal(requestedUrl, "https://example.com/social.png");
+  assert.match(response.headers["content-type"], /image\/png/);
+  assert.equal(response.headers["cache-control"], "private, max-age=300");
+});
+
+test("serves the local editor script without unsafe DOM insertion", async () => {
+  const app = createApp();
+  const response = await request(app).get("/app.js").expect(200);
+
+  assert.match(response.headers["content-type"], /javascript/);
+  assert.match(response.text, /textContent/);
+  assert.doesNotMatch(response.text, /\.innerHTML\s*=/);
 });
 
 test("escapes attribute delimiters and allows only web URLs", () => {
