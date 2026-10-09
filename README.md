@@ -1,6 +1,16 @@
 # MetaScope — SEO Audit & Social Preview
 
+## Overview
+
 A compact Node.js application that audits a public webpage or pasted HTML, explains deterministic SEO and social metadata findings, and lets you edit metadata against live previews before copying generated tags. It demonstrates server-side HTML parsing, defensive outbound HTTP requests, secure rendering, and automated HTTP testing.
+
+The hard part is not drawing preview cards; it is fetching a user-supplied URL without turning the server into a proxy for private networks or unbounded downloads. MetaScope treats every target, DNS result, redirect, response, and metadata-controlled image as untrusted, then applies explicit network and size boundaries before parsing or rendering anything.
+
+## Screenshot
+
+![MetaScope audit interface with a metadata score and search, Facebook, X, LinkedIn, Slack, and WhatsApp preview cards](docs/images/metascope-audit.png)
+
+_A completed URL audit showing the analyzer, score summary, deterministic checks, metadata editor, and generated preview cards._
 
 ## Features
 
@@ -17,7 +27,64 @@ A compact Node.js application that audits a public webpage or pasted HTML, expla
 - Resolves relative preview URLs against the audited page.
 - Returns clear errors for invalid, unreachable, oversized, slow, or non-HTML targets.
 
-## Security and reliability
+## How it works
+
+1. Accept a public page URL, pasted HTML, or a sitemap URL.
+2. Validate the URL and, for outbound requests, resolve DNS before connecting.
+3. Inspect every redirect and keep the fetch within timeout, redirect, content-type, and byte limits.
+4. Parse HTML with Cheerio while keeping raw extracted metadata separate from normalized display values.
+5. Run deterministic SEO, social metadata, image, and structured-data checks.
+6. Render the report and preview cards, or serialize the same analysis through JSON and Markdown endpoints.
+
+## Architecture diagram
+
+```mermaid
+flowchart LR
+    U[URL, HTML, or sitemap input] --> V[Validation and normalization]
+    V -->|Pasted HTML| P[Cheerio parsing]
+    V -->|Public URL| D[DNS and public-IP checks]
+    D --> F[Bounded fetch]
+    F --> R{Redirect?}
+    R -->|Yes| V
+    R -->|No| P
+    P --> M[Raw metadata and normalized values]
+    M --> A[Deterministic audit and scoring]
+    M --> I[Bounded social-image inspection]
+    A --> O[Server-rendered report]
+    I --> O
+    O --> C[Search and social preview cards]
+    O --> E[JSON and Markdown exports]
+
+    S[Sitemap input] --> SD[Bounded sitemap discovery]
+    SD -->|Same-origin pages, max 10| V
+```
+
+Redirects deliberately return to the same validation boundary: a safe-looking public URL is not trusted to remain safe after it redirects. Sitemap discovery also reuses the outbound-fetch controls and adds same-origin, depth, page-count, and concurrency limits.
+
+### Project structure
+
+```text
+.
+├── .github/workflows/ci.yml  # Node 20/22 CI checks
+├── lib/
+│   ├── analyze.js            # Shared analysis pipeline
+│   ├── audit.js              # Deterministic rules and scoring
+│   ├── image-inspector.js    # Bounded social-image validation
+│   ├── metadata.js           # Normalized metadata parsing
+│   ├── report.js             # Public JSON and Markdown serializers
+│   ├── safe-fetch.js         # URL validation and bounded page fetching
+│   └── site-audit.js         # Bounded sitemap and cross-page analysis
+├── public/
+│   ├── app.js                # Input tabs and live draft previews
+│   ├── tag-generator.js      # Shared browser/server tag generation
+│   └── styles.css
+├── test/                     # Unit and HTTP integration tests
+├── server.js                 # Express routes and server rendering
+├── package.json
+└── pnpm-lock.yaml
+```
+
+## Security decisions
 
 Because the application fetches user-provided URLs, outbound requests are treated as untrusted:
 
@@ -36,7 +103,9 @@ Because the application fetches user-provided URLs, outbound requests are treate
 
 These controls are appropriate for a demonstration project, but a public high-traffic deployment should also enforce limits at its reverse proxy or hosting platform.
 
-## Technology
+## Quick start
+
+### Technology
 
 - Node.js and CommonJS
 - Express 5
@@ -46,14 +115,14 @@ These controls are appropriate for a demonstration project, but a public high-tr
 - Responsive, dependency-free CSS
 - Node's built-in test runner and Supertest
 
-## Requirements
+### Requirements
 
 - Node.js 20.18.1 or newer
 - pnpm 10.33.0
 
 The repository is pnpm-based. Avoid running npm and pnpm against the same `node_modules` directory.
 
-## Run locally
+### Run locally
 
 ```bash
 corepack enable
@@ -71,7 +140,13 @@ PORT=4000 pnpm start
 
 No database, API key, or environment file is required.
 
-## API and report exports
+### Deployment and demo
+
+The included `Procfile` starts the application with `node server.js`, and the server honors the hosting platform's `PORT` environment variable. Deploy it to a Node.js host, verify the public URL, and then add that URL near the top of this README and to the repository's GitHub **Website** field.
+
+There is currently no verified public demo. The previous Heroku deployment is not linked because it returns 404.
+
+## API examples
 
 Analyze a public page as JSON:
 
@@ -103,7 +178,7 @@ If the application runs behind a reverse proxy, set the number of trusted proxy 
 TRUST_PROXY_HOPS=1 pnpm start
 ```
 
-## Tests
+## Tests and CI
 
 ```bash
 pnpm test
@@ -133,36 +208,7 @@ The test suite covers:
 - Generated metadata-tag escaping and unsafe URL omission
 - HTTP security headers, error responses, and rate limiting
 
-## Project structure
-
-```text
-.
-├── .github/workflows/ci.yml  # Node 20/22 CI checks
-├── lib/
-│   ├── analyze.js            # Shared analysis pipeline
-│   ├── audit.js              # Deterministic rules and scoring
-│   ├── image-inspector.js    # Bounded social-image validation
-│   ├── metadata.js           # Normalized metadata parsing
-│   ├── report.js             # Public JSON and Markdown serializers
-│   ├── safe-fetch.js         # URL validation and bounded page fetching
-│   └── site-audit.js         # Bounded sitemap and cross-page analysis
-├── public/
-│   ├── app.js                # Input tabs and live draft previews
-│   ├── tag-generator.js      # Shared browser/server tag generation
-│   └── styles.css
-├── test/                     # Unit and HTTP integration tests
-├── server.js                 # Express routes and server rendering
-├── package.json
-└── pnpm-lock.yaml
-```
-
-## Deployment
-
-The included `Procfile` starts the application with `node server.js`, and the server honors the hosting platform's `PORT` environment variable. Deploy it to a Node.js host, verify the public URL, and then add that URL to the repository's GitHub **Website** field.
-
-The previous Heroku demo is no longer linked because it currently returns 404.
-
-## Known limitations
+## Tradeoffs and limitations
 
 - Social previews approximate platform layouts; platforms may apply additional rules and image processing.
 - The numerical score is a transparent MetaScope rules score, not a search-engine ranking prediction.
