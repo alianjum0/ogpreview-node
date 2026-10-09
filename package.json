@@ -11,6 +11,11 @@
     "verify": "pnpm run check:syntax && pnpm test && pnpm audit --prod --audit-level=high"
   },
   "packageManager": "pnpm@10.33.0",
+  "pnpm": {
+    "overrides": {
+      "proxy-addr": "2.0.8"
+    }
+  },
   "engines": {
     "node": ">=20.18.1"
   },
